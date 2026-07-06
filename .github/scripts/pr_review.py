@@ -131,11 +131,15 @@ Return a JSON object with this structure:
   "verdict": "approve|request_changes|comment"
 }}
 
-- severity: "critical" = bug/vulnerability, must fix. "high" = likely problem. "medium" = improvement. "low" = nitpick. "info" = observation.
-- verdict: "approve" if code is ready to merge, "request_changes" if critical/high issues exist, "comment" for feedback only.
-- Be specific: reference exact filenames, mention concrete line ranges, suggest concrete code changes.
+- severity: "critical" = bug/vulnerability, must fix. "high" = likely problem.
+  "medium" = improvement. "low" = nitpick. "info" = observation.
+- verdict: "approve" if code is ready to merge, "request_changes" if
+  critical/high issues exist, "comment" for feedback only.
+- Be specific: reference exact filenames, mention concrete line ranges,
+  suggest concrete code changes.
 - Do NOT suggest adding logging as a fix for real bugs.
-- If there are no issues to report, return an empty findings array and verdict "approve".
+- If there are no issues to report, return an empty findings array and
+  verdict "approve".
 
 ## PR Diff:
 ```diff
@@ -330,7 +334,11 @@ def post_inline_comments(findings):
     ]
 
     for finding in inline[:10]:  # Limit to 10 inline comments
-        body = f"**{finding.get('severity', '').upper()}**: {finding.get('title', '')}\n\n{finding.get('description', '')}"
+        body = (
+            f"**{finding.get('severity', '').upper()}**: "
+            f"{finding.get('title', '')}\n\n"
+            f"{finding.get('description', '')}"
+        )
         file_path = finding["file"]
         line = finding.get("line", "")
 
@@ -357,7 +365,8 @@ def post_inline_comments(findings):
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(
-                f"Warning: Failed to post inline comment on {file_path}: {result.stderr}"
+                f"Warning: Failed to post inline comment "
+                f"on {file_path}: {result.stderr}"
             )
 
 

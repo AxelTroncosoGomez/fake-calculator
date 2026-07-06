@@ -19,7 +19,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 
 
 def get_pr_diff():
@@ -145,38 +144,34 @@ Return a JSON object with this structure:
 def call_opencode(prompt):
     model = os.environ.get("OPENCODE_MODEL", "opencode-go/deepseek-v4-pro")
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False, prefix="pr-review-"
-    ) as f:
-        f.write(prompt)
-        prompt_file = f.name
-
-    try:
-        result = subprocess.run(
-            [
-                "opencode",
-                "run",
-                "--model",
-                model,
-                "Review the attached PR diff and return JSON findings.",
-                "--file",
-                prompt_file,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=300,
-            env={
-                **os.environ,
-                "OPENCODE_API_KEY": os.environ.get("OPENCODE_API_KEY", ""),
-            },
-        )
-    finally:
-        os.unlink(prompt_file)
+    result = subprocess.run(
+        [
+            "opencode",
+            "run",
+            "--model",
+            model,
+            prompt,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        env={
+            **os.environ,
+            "OPENCODE_API_KEY": os.environ.get("OPENCODE_API_KEY", ""),
+        },
+    )
 
     if result.returncode != 0:
         raise RuntimeError(f"opencode run failed: {result.stderr}")
 
-    return result.stdout
+    output = result.stdout.strip()
+    if not output and result.stderr.strip():
+        output = result.stderr.strip()
+
+    if not output:
+        raise RuntimeError("opencode returned empty response")
+
+    return output
 
 
 def extract_json(text):

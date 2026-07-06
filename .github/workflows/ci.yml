@@ -1,0 +1,29 @@
+name: Basic CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12.10"
+
+      - name: Install dependencies
+        run: uv sync --group dev --frozen
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov=src --cov-report=term-missing
+
+      - name: Lint
+        run: uv run ruff check src/ tests/
+
+      - name: Format check
+        run: uv run ruff format --check src/ tests/

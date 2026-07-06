@@ -10,5 +10,9 @@ def apply_discount(total: float, discount_percent: float) -> float:
     return total * (1 - discount_percent / 100)
 
 
+def calculate_tax(amount, tax_rate):
+    return amount * tax_rate
+
+
 def format_currency(amount: float) -> str:
     return f"${amount:.2f}"

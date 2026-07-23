@@ -1,0 +1,134 @@
+name: "Semantic PR Check"
+
+# Validates that pull request titles follow the Conventional Commits spec.
+#
+# IMPORTANT — repository setup required for this to actually matter:
+#   Settings > General > Pull Requests
+#     [x] Allow squash merging
+#     [x] Default to PR title for squash merge commits
+#   Without that, you are validating a string that never reaches git history.
+#
+# NOTE on pull_request_target: this workflow always runs the version of the file
+# that lives on the DEFAULT BRANCH. Changes made here will NOT apply to the PR
+# that introduces them — only to subsequent PRs after the change is merged.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - edited
+      # `labeled` / `unlabeled` are required for `ignoreLabels` to re-trigger
+      # the check when you add or remove a skip label.
+      - labeled
+      - unlabeled
+      # Uncomment `synchronize` ONLY if this check is a required status check
+      # for merging. Required checks must run against the latest push.
+      # - synchronize
+
+# Least privilege at the workflow level. The job below grants only what it needs.
+permissions:
+  contents: read
+
+concurrency:
+  group: semantic-pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  main:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    permissions:
+      # `read` is enough for validation alone.
+      # `write` is required for the sticky comment steps at the bottom.
+      pull-requests: write
+    steps:
+      # TODO: replace the tag with the full commit SHA of v6.1.1 and keep the
+      # version in a trailing comment, e.g.:
+      #   uses: amannn/action-semantic-pull-request@<40-char-sha>  # v6.1.1
+      # Let Dependabot bump it. Tags are mutable; SHAs are not.
+      - uses: amannn/action-semantic-pull-request@v6.1.1
+        id: lint_pr_title
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Allowed types (newline-delimited regex, auto-wrapped in ^ $).
+          # Keep this list in sync with whatever generates your CHANGELOG.
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            chore
+            revert
+
+          # Allowed scopes (newline-delimited regex, auto-wrapped in ^ $).
+          # Adjust these to the real module boundaries of the repo.
+          scopes: |
+            estimation
+            variogram
+            simulation
+            ui
+            io
+            licensing
+            infra
+            deps
+
+          # Scopes stay optional — this is not a monorepo.
+          requireScope: false
+
+          # Reject uppercase scopes and the `release` scope (reserved for
+          # release automation, which is skipped via ignoreLabels anyway).
+          disallowScopes: |
+            release
+            [A-Z]+
+
+          # Subject must: not start with an uppercase letter,
+          # not end with a period, and be at least 10 characters.
+          subjectPattern: ^(?![A-Z])(?!.*\.$).{10,}$
+
+          subjectPatternError: |
+            The subject "{subject}" found in the pull request title "{title}"
+            doesn't match the required pattern. The subject must:
+              - start with a lowercase character
+              - not end with a period
+              - be at least 10 characters long
+
+            Example: feat(estimation): add ordinary kriging neighbourhood cache
+
+          # Skip validation entirely for PRs carrying any of these labels.
+          # Useful for bot-authored PRs whose titles you don't control.
+          ignoreLabels: |
+            dependencies
+            bot
+            skip-pr-lint
+
+      # Post (or update) a single comment explaining the failure.
+      - uses: marocchino/sticky-pull-request-comment@v2
+        if: always() && (steps.lint_pr_title.outputs.error_message != null)
+        with:
+          header: pr-title-lint-error
+          message: |
+            Hi! This repository requires pull request titles to follow the
+            [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+            specification, and it looks like this title needs adjusting.
+
+            Details:
+
+            ```
+            ${{ steps.lint_pr_title.outputs.error_message }}
+            ```
+
+            Note: since a PR title is a single line, breaking changes are marked
+            with `!` — for example `refactor!: drop python 3.9 support`.
+
+      # Remove the comment once the title is fixed.
+      - if: ${{ steps.lint_pr_title.outputs.error_message == null }}
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-title-lint-error
+          delete: true

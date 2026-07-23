@@ -166,23 +166,76 @@ https://github.com/AxelTroncosoGomez/fake-calculator/blob/main/CHANGELOG.md#feat
 
 ---
 
-## How releases work (future)
+## How releases work
 
-When you create a git tag (e.g. `v1.1.0`), `git-cliff` automatically splits
-the changelog by version:
+### Option A: Automated (recommended)
+
+When you push a git tag matching `v*` (e.g. `v1.1.0`), the `release.yml`
+workflow runs automatically:
 
 ```
-## [1.1.0] - 2026-07-23
-### Features
-- *(ui)* Add dark mode toggle
+You push a tag:
+  git tag v1.1.0 && git push origin v1.1.0
 
-### Bug Fixes
-- *(api)* Fix null pointer
+  └─ release.yml triggers (on push of tag v*)
 
-## [1.0.0] - 2026-06-01
-### Features
-- Initial release
+      ├─ git-cliff --latest generates the changelog for v1.0.0..v1.1.0
+
+      └─ Creates a GitHub Release with that changelog as the body
 ```
 
-No additional configuration is needed — `git-cliff` detects tags and groups
-commits between them automatically.
+The release appears on the [Releases page][2] with the full changelog for that
+version, grouped by type, exactly as it appears in `CHANGELOG.md`.
+
+Nothing else is needed — the workflow handles everything. To issue a release:
+
+```bash
+# 1. Make sure you're on main
+git checkout main
+git pull
+
+# 2. Tag the current commit
+git tag v1.1.0
+
+# 3. Push the tag
+git push origin v1.1.0
+```
+
+The workflow produces:
+
+```
+[Releases page]
+┌────────────────────────────────────────────────┐
+│ v1.1.0                                          │
+│                                                 │
+│ ### Features                                    │
+│ - *(ui)* Add dark mode toggle                   │
+│ - *(api)* Add pagination to list endpoint       │
+│                                                 │
+│ ### Bug Fixes                                   │
+│ - *(parser)* Fix null reference on empty input  │
+│                                                 │
+│ ### Continuous Integration                      │
+│ - Add release workflow                          │
+│                                                 │
+│ Assets: (none)                                  │
+└────────────────────────────────────────────────┘
+```
+
+### Option B: Manual
+
+If you prefer creating releases by hand through the GitHub UI:
+
+1. Open the [Releases page][2] and click **"Draft a new release"**
+2. In the **"Choose a tag"** dropdown, type your version tag (e.g. `v1.1.0`)
+   and select **"Create new tag: v1.1.0 on publish"**
+3. Set the **Release title** to the tag name (e.g. `v1.1.0`)
+4. Open `CHANGELOG.md` on `main`, copy the section for your version (from
+   `## [1.1.0]` down to the next `## [version]` heading), and paste it into
+   the **"Describe this release"** textarea
+5. Click **"Publish release"**
+
+The result is identical — the changelog content appears as the release body
+on the Releases page.
+
+[2]: https://github.com/AxelTroncosoGomez/fake-calculator/releases

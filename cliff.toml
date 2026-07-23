@@ -41,6 +41,3 @@ protect_breaking_commit_label = false
 filter_commits = false
 sort_commits = "oldest"
 topo_order = false
-link_parsers = [
-  { pattern = "#(\\d+)", href = "https://github.com/AxelTroncosoGomez/fake-calculator/issues/$1" },
-]

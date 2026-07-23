@@ -26,8 +26,15 @@ def apply_discount(total: float, discount_percent: float) -> float:
         The discounted amount.
 
     Raises:
+        TypeError: If total or discount_percent is not a number.
         ValueError: If discount_percent is not between 0 and 100.
     """
+    if isinstance(total, bool) or not isinstance(total, (int, float)):
+        raise TypeError("total must be a number")
+    if isinstance(discount_percent, bool) or not isinstance(
+        discount_percent, (int, float)
+    ):
+        raise TypeError("discount_percent must be a number")
     if discount_percent < 0 or discount_percent > 100:
         raise ValueError("discount must be between 0 and 100")
     return total * (1 - discount_percent / 100)
@@ -47,9 +54,9 @@ def calculate_tax(amount: float, tax_rate: float) -> float:
         TypeError: If amount or tax_rate is not a number.
         ValueError: If tax_rate is not between 0 and 100.
     """
-    if not isinstance(amount, (int, float)):
+    if isinstance(amount, bool) or not isinstance(amount, (int, float)):
         raise TypeError("amount must be a number")
-    if not isinstance(tax_rate, (int, float)):
+    if isinstance(tax_rate, bool) or not isinstance(tax_rate, (int, float)):
         raise TypeError("tax_rate must be a number")
     if tax_rate < 0 or tax_rate > 100:
         raise ValueError("tax_rate must be between 0 and 100")

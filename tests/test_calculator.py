@@ -36,6 +36,14 @@ class TestApplyDiscount:
         with pytest.raises(ValueError, match="discount must be between 0 and 100"):
             apply_discount(100, 150)
 
+    def test_raises_for_bool_total(self):
+        with pytest.raises(TypeError, match="total must be a number"):
+            apply_discount(True, 20)
+
+    def test_raises_for_bool_discount(self):
+        with pytest.raises(TypeError, match="discount_percent must be a number"):
+            apply_discount(100, False)
+
 
 class TestCalculateTax:
     def test_calculates_tax_for_positive_amount(self):
@@ -51,9 +59,17 @@ class TestCalculateTax:
         with pytest.raises(TypeError, match="amount must be a number"):
             calculate_tax("100", 8)
 
+    def test_raises_for_bool_amount(self):
+        with pytest.raises(TypeError, match="amount must be a number"):
+            calculate_tax(True, 8)
+
     def test_raises_for_non_numeric_tax_rate(self):
         with pytest.raises(TypeError, match="tax_rate must be a number"):
             calculate_tax(100, "8%")
+
+    def test_raises_for_bool_tax_rate(self):
+        with pytest.raises(TypeError, match="tax_rate must be a number"):
+            calculate_tax(100, False)
 
     def test_raises_for_negative_tax_rate(self):
         with pytest.raises(ValueError, match="tax_rate must be between 0 and 100"):

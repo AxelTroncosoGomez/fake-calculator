@@ -1,0 +1,41 @@
+name: "Changelog Fragment Check"
+# Fails a PR that adds no user-facing news fragment under changelog.d/.
+# Escape hatch: apply the `sin-changelog` label to skip.
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+
+concurrency:
+  group: changelog-fragment-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Require news fragment
+    runs-on: ubuntu-latest
+    # Skip when the author explicitly opts out.
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'sin-changelog') }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history so towncrier can diff against the base branch.
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12.10"
+
+      - name: Install dependencies
+        run: uv sync --group dev --frozen
+
+      - name: Check for a news fragment
+        run: uv run towncrier check --compare-with origin/${{ github.base_ref }}

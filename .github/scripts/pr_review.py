@@ -14,7 +14,7 @@ Environment variables expected:
   GITHUB_TOKEN          - GitHub PAT for posting comments
   GITHUB_REPOSITORY     - owner/repo (set by GitHub Actions)
   GITHUB_PULL_REQUEST_NUMBER - PR number (set by GitHub Actions)
-  REVIEW_MAX_TOKENS     - Max output tokens (default: 4096)
+  REVIEW_MAX_TOKENS     - Max output tokens (default: 8192)
   REVIEW_TEMPERATURE    - Model temperature (default: 0.3)
 """
 
@@ -24,125 +24,14 @@ import subprocess
 import sys
 from urllib import error, request
 
-
-def get_pr_diff():
-    """Fetch the PR diff using gh CLI."""
-    repo = os.environ["GITHUB_REPOSITORY"]
-    pr_number = os.environ["GITHUB_PULL_REQUEST_NUMBER"]
-    result = subprocess.run(
-        ["gh", "pr", "diff", pr_number, "--repo", repo],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"gh pr diff failed: {result.stderr}")
-    return result.stdout
-
-
-def get_pr_changed_files():
-    """Fetch list of files changed in the PR."""
-    repo = os.environ["GITHUB_REPOSITORY"]
-    pr_number = os.environ["GITHUB_PULL_REQUEST_NUMBER"]
-    result = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "view",
-            pr_number,
-            "--repo",
-            repo,
-            "--json",
-            "files",
-            "--jq",
-            ".files[].path",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        return []
-    return [f for f in result.stdout.strip().split("\n") if f]
-
-
-def build_review_prompt(diff, changed_files):
-    """Build a structured prompt for the Gemini model to review code."""
-    file_list = "\n".join(f"  - {f}" for f in changed_files[:50])
-    truncated = ""
-    if len(changed_files) > 50:
-        truncated = f"  ... and {len(changed_files) - 50} more files"
-
-    prompt = f"""You are a senior software engineer performing a thorough code review.
-
-Review the following Pull Request diff and provide structured feedback.
-Focus on the categories below with specific, actionable advice.
-
-## Files changed:
-{file_list}{truncated}
-
-## Review categories (check each):
-
-1. **Test Quality & Coverage**
-   - Are new/modified functions covered by tests?
-   - Are edge cases tested? (null, empty, boundary values)
-   - Do test names clearly describe what's being tested?
-   - Are tests isolated and deterministic?
-
-2. **Clean Code & Readability**
-   - Are function names descriptive and consistent?
-   - Is the code DRY (no duplication)?
-   - Are functions small and single-purpose?
-   - Are magic numbers/strings extracted as constants?
-
-3. **Formatting & Style**
-   - Is naming consistent with project conventions?
-   - Is whitespace/indentation consistent?
-   - Are imports organized?
-
-4. **Error Handling & Robustness**
-   - Are errors handled appropriately?
-   - Is input validated?
-   - Are there any potential null reference issues?
-
-5. **Security**
-   - Any hardcoded secrets or credentials?
-   - Any unsafe input handling?
-   - Are dependencies secure?
-
-6. **Performance**
-   - Any obvious N+1 query patterns?
-   - Are there unnecessary allocations or loops?
-   - Is async used where appropriate?
-
-## Output format:
-Return a JSON object with this structure:
-{{
-  "summary": "Brief 2-3 sentence overall assessment",
-  "findings": [
-    {{
-      "severity": "critical|high|medium|low|info",
-      "category": "testing|clean-code|formatting|error-handling|security|performance",
-      "file": "path/to/file.js",
-      "line": "approximate line mention from diff context",
-      "title": "Short title (max 80 chars)",
-      "description": "Detailed explanation with specific suggestion"
-    }}
-  ],
-  "suggestions": ["1-3 overall improvement suggestions as strings"],
-  "verdict": "approve|request_changes|comment"
-}}
-
-- severity: "critical" = bug/vulnerability, must fix. "high" = likely problem. "medium" = improvement. "low" = nitpick. "info" = observation.
-- verdict: "approve" if code is ready to merge, "request_changes" if critical/high issues exist, "comment" for feedback only.
-- Be specific: reference exact filenames, mention concrete line ranges, suggest concrete code changes.
-- Do NOT suggest adding logging as a fix for real bugs.
-- If there are no issues to report, return an empty findings array and verdict "approve".
-
-## PR Diff:
-```diff
-{diff[:80000]}
-```
-"""
-    return prompt
+from review_prompt import (
+    build_review_prompt,
+    extract_json,
+    get_pr_changed_files,
+    get_pr_diff,
+    post_comment,
+    post_inline_comments,
+)
 
 
 def call_gemini(prompt):
@@ -150,7 +39,7 @@ def call_gemini(prompt):
     project_id = os.environ["GCP_PROJECT_ID"]
     region = os.environ.get("GCP_REGION", "us-central1")
     model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
-    max_tokens = int(os.environ.get("REVIEW_MAX_TOKENS", "4096"))
+    max_tokens = int(os.environ.get("REVIEW_MAX_TOKENS", "8192"))
     temperature = float(os.environ.get("REVIEW_TEMPERATURE", "0.3"))
 
     url = (
@@ -159,7 +48,6 @@ def call_gemini(prompt):
         f"publishers/google/models/{model}:generateContent"
     )
 
-    # Get ADC access token via gcloud
     token_result = subprocess.run(
         ["gcloud", "auth", "print-access-token"],
         capture_output=True,
@@ -190,7 +78,6 @@ def call_gemini(prompt):
     except error.HTTPError as e:
         raise RuntimeError(f"Gemini API error {e.code}: {e.read().decode()}")
 
-    # Parse the response
     try:
         text = response_body["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError):
@@ -201,25 +88,6 @@ def call_gemini(prompt):
     return text
 
 
-def extract_json(text):
-    """Extract JSON object from model response text."""
-    # Find JSON block between ```json ... ``` or raw { ... }
-    text = text.strip()
-    if "```json" in text:
-        start = text.index("```json") + 7
-        end = text.index("```", start)
-        text = text[start:end].strip()
-    elif text.startswith("{"):
-        pass
-    else:
-        # Try to find first { and last }
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1:
-            text = text[start : end + 1]
-    return json.loads(text)
-
-
 def format_comment(review_data):
     """Format review findings into a GitHub comment body."""
     findings = review_data.get("findings", [])
@@ -228,20 +96,20 @@ def format_comment(review_data):
     suggestions = review_data.get("suggestions", [])
 
     severity_icons = {
-        "critical": "🔴",
-        "high": "🟠",
-        "medium": "🟡",
-        "low": "🔵",
-        "info": "⚪",
+        "critical": "\U0001f534",
+        "high": "\U0001f7e0",
+        "medium": "\U0001f7e1",
+        "low": "\U0001f535",
+        "info": "\u26aa",
     }
     verdict_labels = {
-        "approve": "✅ Approve",
-        "request_changes": "❌ Request Changes",
-        "comment": "💬 Comment",
+        "approve": "\u2705 Approve",
+        "request_changes": "\u274c Request Changes",
+        "comment": "\U0001f4ac Comment",
     }
 
     lines = [
-        "## 🤖 Gemini Code Review",
+        "## \U0001f916 Gemini Code Review",
         "",
         f"**Verdict:** {verdict_labels.get(verdict, verdict)}",
         "",
@@ -250,14 +118,14 @@ def format_comment(review_data):
     ]
 
     if not findings:
-        lines.append("No issues found. Great work! 🎉")
+        lines.append("No issues found. Great work! \U0001f389")
         return "\n".join(lines)
 
     lines.append("### Findings")
     lines.append("")
 
     for i, finding in enumerate(findings, 1):
-        icon = severity_icons.get(finding.get("severity", "info"), "⚪")
+        icon = severity_icons.get(finding.get("severity", "info"), "\u26aa")
         category = finding.get("category", "general")
         title = finding.get("title", "Issue")
         description = finding.get("description", "")
@@ -288,83 +156,9 @@ def format_comment(review_data):
     return "\n".join(lines)
 
 
-def post_comment(body):
-    """Post a review comment on the PR using gh CLI."""
-    repo = os.environ["GITHUB_REPOSITORY"]
-    pr_number = os.environ["GITHUB_PULL_REQUEST_NUMBER"]
-
-    tmpfile = "/tmp/gemini-review-comment.md"
-    with open(tmpfile, "w") as f:
-        f.write(body)
-
-    result = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "review",
-            pr_number,
-            "--repo",
-            repo,
-            "--comment",
-            "--body-file",
-            tmpfile,
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"Failed to post review: {result.stderr}")
-    print(f"Review posted: {result.stdout.strip()}")
-
-
-def post_inline_comments(findings):
-    """Post inline review comments on specific lines (best-effort)."""
-    repo = os.environ["GITHUB_REPOSITORY"]
-    pr_number = os.environ["GITHUB_PULL_REQUEST_NUMBER"]
-
-    # Only post inline for critical and high severity
-    inline = [
-        f
-        for f in findings
-        if f.get("severity") in ("critical", "high") and f.get("file")
-    ]
-
-    for finding in inline[:10]:  # Limit to 10 inline comments
-        body = f"**{finding.get('severity', '').upper()}**: {finding.get('title', '')}\n\n{finding.get('description', '')}"
-        file_path = finding["file"]
-        line = finding.get("line", "")
-
-        # Try to extract line number from line info
-        line_num = None
-        if line and "L" in str(line):
-            try:
-                line_num = int(str(line).replace("L", "").split(",")[0])
-            except ValueError:
-                pass
-
-        cmd = [
-            "gh",
-            "api",
-            f"/repos/{repo}/pulls/{pr_number}/comments",
-            "-f",
-            f"body={body}",
-            "-f",
-            f"path={file_path}",
-        ]
-        if line_num:
-            cmd += ["-f", f"line={line_num}"]
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(
-                f"Warning: Failed to post inline comment on {file_path}: {result.stderr}"
-            )
-
-
 def main():
     print("=== Gemini PR Code Reviewer ===")
 
-    # Validate required env vars
     required = [
         "GCP_PROJECT_ID",
         "GITHUB_TOKEN",
@@ -381,7 +175,6 @@ def main():
     print(f"Project: {os.environ['GCP_PROJECT_ID']}")
     print(f"Region: {os.environ.get('GCP_REGION', 'us-central1')}")
 
-    # Fetch PR context
     print("Fetching PR diff...")
     try:
         diff = get_pr_diff()
@@ -397,7 +190,6 @@ def main():
     changed_files = get_pr_changed_files()
     print(f"Changed files: {len(changed_files)}")
 
-    # Build prompt and call Gemini
     print("Building review prompt...")
     prompt = build_review_prompt(diff, changed_files)
 
@@ -406,25 +198,26 @@ def main():
         response_text = call_gemini(prompt)
     except RuntimeError as e:
         print(f"ERROR calling Gemini: {e}")
-        # Post a failure comment on the PR
         post_comment(
             "## Gemini Code Review\n\n"
-            "❌ **Review failed.** The AI model could not complete the review.\n\n"
-            f"Error: {e}"
+            "\u274c **Review failed.** The AI model could not complete the "
+            f"review.\n\nError: {e}",
+            tmpfile_prefix="gemini-review",
         )
         sys.exit(1)
 
-    # Parse the response
     print("Parsing Gemini response...")
     try:
         review_data = extract_json(response_text)
     except (json.JSONDecodeError, ValueError) as e:
         print(f"ERROR parsing JSON from model response: {e}")
         print(f"Raw response (first 1000 chars): {response_text[:1000]}")
+        print(f"Raw response (last 500 chars): {response_text[-500:]}")
         post_comment(
             "## Gemini Code Review\n\n"
-            "❌ **Review failed.** The AI model returned an unexpected format.\n\n"
-            "Raw response was logged but could not be parsed as JSON."
+            "\u274c **Review failed.** The AI model returned an unexpected "
+            "format.\n\nRaw response was logged but could not be parsed as JSON.",
+            tmpfile_prefix="gemini-review",
         )
         sys.exit(1)
 
@@ -432,20 +225,14 @@ def main():
     verdict = review_data.get("verdict", "comment")
     print(f"Findings: {len(findings)}, Verdict: {verdict}")
 
-    # Build and post the summary comment
     comment = format_comment(review_data)
     print("Posting review comment...")
-    post_comment(comment)
+    post_comment(comment, tmpfile_prefix="gemini-review")
 
-    # Post inline comments for critical/high findings
     if findings:
         post_inline_comments(findings)
 
-    # Approve or request changes based on verdict
-    if verdict == "approve":
-        # Optionally auto-approve
-        pass
-    elif verdict == "request_changes":
+    if verdict == "request_changes":
         print("Verdict: REQUEST CHANGES (critical issues found)")
 
     print("Review complete.")

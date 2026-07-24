@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ai-pr-review-test"
-version = "1.0.0"
+version = "1.0.1"
 description = "Test project for AI-powered PR code review CI pipeline (Python)"
 requires-python = "==3.12.10"
 
@@ -13,6 +13,7 @@ dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
     "ruff==0.15.20",
+    "towncrier==24.8.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -33,3 +34,43 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# towncrier: user-facing release notes ("qué cambia para el usuario").
+# Types are in Spanish because the end users are geólogos / ingenieros de minas.
+# Each PR drops one fragment in changelog.d/ named <PR#>.<tipo>.md, e.g.
+#   changelog.d/122.nuevo.md
+# At release time `towncrier build --version X.Y.Z` collapses them into the file
+# below and git-rm's the fragments. Fragments are markdown, so GIFs/PNGs live
+# inline (commit assets under docs/releases/assets/<version>/).
+#
+# TODO(port): when copying to the real product repo, swap the org/repo in
+# issue_format below.
+# ---------------------------------------------------------------------------
+[tool.towncrier]
+directory = "changelog.d"
+filename = "docs/releases/CHANGELOG-USUARIO.md"
+start_string = "<!-- towncrier release notes start -->\n"
+title_format = "## [{version}] - {project_date}"
+issue_format = "[#{issue}](https://github.com/AxelTroncosoGomez/fake-calculator/pull/{issue})"
+underlines = ["", "", ""]
+
+[[tool.towncrier.type]]
+directory = "rompe"
+name = "Cambios incompatibles"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "nuevo"
+name = "Novedades"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "arreglo"
+name = "Correcciones"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "interno"
+name = "Interno"
+showcontent = false

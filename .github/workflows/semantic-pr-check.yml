@@ -97,7 +97,7 @@ jobs:
             ```
 
             Note: since a PR title is a single line, breaking changes are marked
-            with `!` — for example `refactor!: drop python 3.9 support`.
+            with `!` - for example `refactor!: drop python 3.9 support`.
 
       # Remove the comment once the title is fixed.
       - if: ${{ steps.lint_pr_title.outputs.error_message == null }}

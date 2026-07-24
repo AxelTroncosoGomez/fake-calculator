@@ -2,15 +2,26 @@
 
 ## Overview
 
-This repository generates `CHANGELOG.md` automatically from commit messages that
-follow the [Conventional Commits][1] specification. There are two pieces:
+This repository keeps **two** changelogs, for two audiences:
+
+| Documento | Herramienta | Audiencia | Cuándo |
+|---|---|---|---|
+| `CHANGELOG.md` | git-cliff (Conventional Commits) | desarrolladores | al cortar la release |
+| `docs/releases/CHANGELOG-USUARIO.md` | towncrier (fragments en `changelog.d/`) | geólogos / clientes | al cortar la release |
+
+The pieces:
 
 1. **Semantic PR Check** (`.github/workflows/semantic-pr-check.yml`)
    Validates that every PR title follows the Conventional Commits format.
 
-2. **Generate Changelog** (`.github/workflows/changelog.yml`)
-   Reads the git history on `main`, parses every commit, and writes a grouped
-   `CHANGELOG.md`. Runs automatically after every push to `main`.
+2. **Changelog Fragment Check** (`.github/workflows/changelog-fragment.yml`)
+   Requires every PR to add a user-facing news fragment under `changelog.d/`
+   (escape hatch: the `sin-changelog` label). See [`changelog.d/README.md`](changelog.d/README.md).
+
+3. **Release runbook** ([`docs/releases/RELEASE.md`](docs/releases/RELEASE.md))
+   Both changelogs are regenerated **at release time**, in one commit - there is
+   no longer a workflow that rewrites `CHANGELOG.md` on every push to `main`
+   (that commit-back-to-`main` loop was removed).
 
 [1]: https://www.conventionalcommits.org/en/v1.0.0/
 
@@ -22,25 +33,24 @@ follow the [Conventional Commits][1] specification. There are two pieces:
 You open a PR:
   Title: "feat(ui): add dark mode toggle button"
 
-  └─ semantic-pr-check.yml runs, validates the title format
+  ├─ semantic-pr-check.yml validates the title format
+  └─ changelog-fragment.yml requires a changelog.d/ fragment
+     (unless the PR is labeled `sin-changelog`)
 
 You squash-merge the PR into main:
 
   └─ GitHub creates a single commit on main with the PR title as the message
+     (no changelog is rewritten on push anymore)
 
-  └─ changelog.yml triggers (push to main)
+At release time (see docs/releases/RELEASE.md):
 
-      └─ git-cliff reads every commit on main, parses Conventional Commits
+  ├─ git-cliff regenerates CHANGELOG.md from the commit history
+  └─ towncrier collapses changelog.d/ into docs/releases/CHANGELOG-USUARIO.md
 
-      └─ Generates CHANGELOG.md with sections like:
+      ### Features
+      - *(ui)* Add dark mode toggle button
 
-          ### Features
-          - *(ui)* Add dark mode toggle button
-
-          ### Bug Fixes
-          - *(api)* Prevent null pointer in request parser
-
-      └─ Auto-commits the updated CHANGELOG.md back to main
+  All in one commit, then `git tag vX.Y.Z && git push` → release.yml publishes.
 ```
 
 ---
@@ -127,17 +137,19 @@ prefixes in `cliff.toml`).
 
 ---
 
-## What happens on each push to main
+## What happens at release time
 
-1. The `changelog.yml` workflow checks out the full git history.
-2. `git-cliff` reads every commit from the oldest to the newest, parses type
-   and scope from each Conventional Commits message.
-3. It generates a complete `CHANGELOG.md` with grouped entries.
-4. If `CHANGELOG.md` changed, the workflow commits and pushes it back to
-   `main` as `github-actions[bot]`.
+`CHANGELOG.md` is **not** rewritten on every push to `main` anymore - the old
+`changelog.yml` (which committed the regenerated file back to `main` with
+`[skip ci]`) was removed because that loop is fragile under branch protection
+and wasteful. Instead, at release time the runbook
+([`docs/releases/RELEASE.md`](docs/releases/RELEASE.md)) runs, in one commit:
 
-The push from the bot does **not** re-trigger the workflow (GitHub prevents
-recursive workflow runs when using the default `GITHUB_TOKEN`).
+1. `git-cliff --tag vX.Y.Z --output CHANGELOG.md` regenerates the dev changelog.
+2. `towncrier build --version X.Y.Z` collapses `changelog.d/` fragments into
+   `docs/releases/CHANGELOG-USUARIO.md` and removes the fragments.
+3. `pyproject.toml`'s version is bumped, then the commit is tagged and pushed;
+   `release.yml` publishes the GitHub Release.
 
 ---
 
@@ -145,12 +157,12 @@ recursive workflow runs when using the default `GITHUB_TOKEN`).
 
 Two files must stay in sync:
 
-1. **`cliff.toml`** — `[git.commit_parsers]` section. Add a new entry:
+1. **`cliff.toml`** - `[git.commit_parsers]` section. Add a new entry:
    ```toml
    { message = "^newtype", group = "<!-- N -->New Section Name" },
    ```
 
-2. **`.github/workflows/semantic-pr-check.yml`** — `types:` list. Add the
+2. **`.github/workflows/semantic-pr-check.yml`** - `types:` list. Add the
    new type to the allowed list.
 
 ---

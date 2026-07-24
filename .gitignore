@@ -123,4 +123,7 @@ dmypy.json
 nul
 CLAUDE.md
 .claude/
-docs/
+# docs/ is kept out of git by default, EXCEPT the user-facing release notes,
+# which are a shipped product artifact and must be tracked.
+docs/*
+!docs/releases/

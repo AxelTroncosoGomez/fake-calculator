@@ -1,0 +1,3 @@
+# Assets (GIFs/PNGs/SVGs) for user-facing release notes.
+# Organize per version: docs/releases/assets/<version>/<file>
+# Reference them relatively from changelog.d/ fragments.

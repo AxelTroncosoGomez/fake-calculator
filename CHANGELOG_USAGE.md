@@ -168,74 +168,82 @@ https://github.com/AxelTroncosoGomez/fake-calculator/blob/main/CHANGELOG.md#feat
 
 ## How releases work
 
-### Option A: Automated (recommended)
+This repo has **two changelogs for two audiences**:
 
-When you push a git tag matching `v*` (e.g. `v1.1.0`), the `release.yml`
-workflow runs automatically:
+| Output | Tool | Audience | Updated by |
+|---|---|---|---|
+| `CHANGELOG.md` | git-cliff | Developers, tooling | `changelog.yml` (every push to `main`) |
+| GitHub Release body | GitHub's native generator | Users reading the [Releases page][2] | `release.yml` (on tag push) |
 
-```
-You push a tag:
-  git tag v1.1.0 && git push origin v1.1.0
+`CHANGELOG.md` is the definitive machine-readable record. The Release body is
+the polished, human-readable version with PR links and author attribution.
 
-  └─ release.yml triggers (on push of tag v*)
-
-      ├─ git-cliff --latest generates the changelog for v1.0.0..v1.1.0
-
-      └─ Creates a GitHub Release with that changelog as the body
-```
-
-The release appears on the [Releases page][2] with the full changelog for that
-version, grouped by type, exactly as it appears in `CHANGELOG.md`.
-
-Nothing else is needed — the workflow handles everything. To issue a release:
+### Creating a release
 
 ```bash
-# 1. Make sure you're on main
 git checkout main
 git pull
 
-# 2. Tag the current commit
-git tag v1.1.0
+# Bump the version in pyproject.toml first, then commit + push, then:
 
-# 3. Push the tag
-git push origin v1.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-The workflow produces:
+That's it. Pushing the tag triggers `release.yml`, which uses GitHub's
+auto-generated release notes (configured by `.github/release.yml`). The
+release appears automatically with:
 
 ```
-[Releases page]
-┌────────────────────────────────────────────────┐
-│ v1.1.0                                          │
-│                                                 │
-│ ### Features                                    │
-│ - *(ui)* Add dark mode toggle                   │
-│ - *(api)* Add pagination to list endpoint       │
-│                                                 │
-│ ### Bug Fixes                                   │
-│ - *(parser)* Fix null reference on empty input  │
-│                                                 │
-│ ### Continuous Integration                      │
-│ - Add release workflow                          │
-│                                                 │
-│ Assets: (none)                                  │
-└────────────────────────────────────────────────┘
+## What's Changed
+* feat: add tax calculator by @AxelTroncosoGomez in #1
+* fix: reject bool inputs by @AxelTroncosoGomez in #2
+
+**Full Changelog**: v0.0.0...v1.0.0
 ```
 
-### Option B: Manual
+### Adding highlights and screenshots (optional)
 
-If you prefer creating releases by hand through the GitHub UI:
+After the release is created, you can edit it to add:
 
-1. Open the [Releases page][2] and click **"Draft a new release"**
-2. In the **"Choose a tag"** dropdown, type your version tag (e.g. `v1.1.0`)
-   and select **"Create new tag: v1.1.0 on publish"**
-3. Set the **Release title** to the tag name (e.g. `v1.1.0`)
-4. Open `CHANGELOG.md` on `main`, copy the section for your version (from
-   `## [1.1.0]` down to the next `## [version]` heading), and paste it into
-   the **"Describe this release"** textarea
-5. Click **"Publish release"**
+1. A **Highlights** section summarizing the most important changes
+2. **Screenshots or GIFs** of UI changes
+3. **Migration notes** for breaking changes
 
-The result is identical — the changelog content appears as the release body
-on the Releases page.
+Go to [Releases][2], click the release, then **Edit release**. Write your
+highlights above the `## What's Changed` line:
+
+```markdown
+## Highlights
+
+- The new Dark Mode toggle under Settings > Appearance turns the whole app dark
+- Export now supports PNG with transparent backgrounds
+- Keyboard shortcut `Ctrl+K` opens the command palette
+
+## What's Changed
+* feat: add dark mode by @you in #12
+* feat: add PNG export by @you in #13
+* fix: tooltip overflow by @you in #14
+...
+```
+
+Screenshots: drag-and-drop images into the release body editor while editing.
+They appear inline in the release.
+
+### How categorization works
+
+Create these labels on your repo (one-time setup) to group PRs into sections:
+
+| Label | Release section |
+|---|---|
+| `feat` | Features |
+| `fix` | Bug Fixes |
+| `docs` | Documentation |
+| *(any other)* | Other Changes |
+
+`.github/release.yml` maps labels to sections. Without labels, all PRs appear
+under "Other Changes" (which is fine for small repos).
+
+To create labels: **Issues > Labels > New label**.
 
 [2]: https://github.com/AxelTroncosoGomez/fake-calculator/releases

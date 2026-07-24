@@ -1,0 +1,28 @@
+# GitHub release notes categories — maps PR labels to release sections.
+#
+# Labels must exist on the repo for grouping to work (e.g. create "feat", "fix",
+# "docs" labels). Until then, all PRs land in "Other Changes".
+#
+# See: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+
+changelog:
+  exclude:
+    labels:
+      - skip-pr-lint
+      - dependencies
+      - bot
+  categories:
+    - title: Features
+      labels:
+        - feat
+        - feature
+    - title: Bug Fixes
+      labels:
+        - fix
+        - bug
+    - title: Documentation
+      labels:
+        - docs
+    - title: Other Changes
+      labels:
+        - "*"

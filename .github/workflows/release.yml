@@ -2,8 +2,10 @@ name: "Create Release"
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
+  # Manual runs from the Actions tab. Select the tag in "Use workflow from";
+  # GITHUB_REF_NAME / github.ref resolve from it (asset names + release tag).
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,26 +15,12 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: softprops/action-gh-release@v2
         with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Generate changelog for this version
-        id: cliff
-        uses: orhun/git-cliff-action@v4
-        with:
-          config: cliff.toml
-          args: --latest --verbose
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          body: ${{ steps.cliff.outputs.content }}
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
+          generate_release_notes: true
           draft: false
           prerelease: false
-          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

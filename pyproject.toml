@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ai-pr-review-test"
-version = "1.0.1"
-description = "Test project for AI-powered PR code review CI pipeline (Python)"
+name = "fake-calculator"
+version = "1.1.0"
+description = "Test App for AI-powered PR code review CI pipeline (Python)"
 requires-python = "==3.12.10"
 
 [dependency-groups]
